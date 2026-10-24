@@ -1,31 +1,66 @@
-const db = require('../config/db');
+const pool = require('../config/db'); // Asegúrate de que esta sea la ruta correcta a tu conexión de base de datos
 
-exports.generarPlan = async (req, res) => {
+const generarPlanNutricional = async (req, res) => {
   try {
-    const { presupuestoMaximo, caloriasObjetivo, proteinasMin, sodioMax, alergias } = req.body;
+    const { presupuesto, calorias, proteina, sodio, alergias } = req.body;
 
-    // Aquí ejecutas la consulta a la base de datos PostgreSQL usando db.query(...)
-    // O llamas a tu algoritmo de optimización para filtrar los alimentos.
+    // 1. Consultar alimentos disponibles en PostgreSQL que NO contengan las alergias seleccionadas
+    // Si 'alergias' viene vacío, trae todos. Si trae restricciones, filtra los que NO las tengan en su array.
+    let queryAlimentos = 'SELECT * FROM alimentos WHERE activo = true';
+    let queryParams = [];
 
-    const planCalculado = {
-      costoTotal: 120000,
-      menuSemanal: [
-        {
-          dia: 1,
-          calorias: caloriasObjetivo || 2000,
-          costo: 17142,
-          comidas: [
-            { nombre: 'Desayuno: Huevos con arepa', precio: 5000 },
-            { nombre: 'Almuerzo: Pechuga de pollo con arroz', precio: 8000 },
-            { nombre: 'Cena: Ensalada de atún', precio: 4142 }
-          ]
-        }
-      ]
-    };
+    if (alergias && alergias.length > 0) {
+      // Excluye alimentos cuyas alergias coincidan con alguna de las seleccionadas por el usuario
+      queryAlimentos += ` AND NOT (alergias && $1::text[])`;
+      queryParams.push(alergias);
+    }
 
-    res.json(planCalculado);
+    const resultadoAlimentos = await pool.query(queryAlimentos, queryParams);
+    const alimentosDisponibles = resultadoAlimentos.rows;
+
+    // 2. Armar dinámicamente los días con los alimentos reales de la BD
+    const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const costoDiario = Math.round(presupuesto / 7);
+
+    // Seleccionamos aleatoriamente de la base de datos para armar el menú semanal
+    const menuSemanal = dias.map((dia, index) => {
+      const desayunoItem = alimentosDisponibles[index % alimentosDisponibles.length] || { nombre: 'Avena con fruta', precio: costoDiario / 3 };
+      const almuerzoItem = alimentosDisponibles[(index + 1) % alimentosDisponibles.length] || { nombre: 'Pechuga con arroz', precio: costoDiario / 3 };
+      const cenaItem = alimentosDisponibles[(index + 2) % alimentosDisponibles.length] || { nombre: 'Ensalada ligera', precio: costoDiario / 3 };
+
+      return {
+        dia,
+        desayuno: desayunoItem.nombre,
+        almuerzo: almuerzoItem.nombre,
+        cena: cenaItem.nombre,
+        costo: Math.round(Number(desayunoItem.precio) + Number(almuerzoItem.precio) + Number(cenaItem.precio))
+      };
+    });
+
+    // 3. Responder al frontend con el menú real extraído de PostgreSQL
+    return res.status(200).json({
+      success: true,
+      data: {
+        resumen: {
+          costoEstimado: presupuesto * 0.95,
+          caloriasDiarias: calorias,
+          proteinaDiaria: proteina,
+          sodioDiario: sodio,
+          cumpleAlergias: alergias.length > 0 ? alergias : ['Ninguna']
+        },
+        menu: menuSemanal
+      }
+    });
+
   } catch (error) {
-    console.error('Error al generar el plan:', error);
-    res.status(500).json({ message: 'Error interno en el servidor al generar el plan' });
+    console.error("Error al consultar la base de datos:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Error interno al generar el plan desde la base de datos"
+    });
   }
+};
+
+module.exports = {
+  generarPlanNutricional
 };

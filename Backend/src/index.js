@@ -1,17 +1,8 @@
+// Ejemplo en Backend/src/routes/index.js
 const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
+const router = express.Router();
+const nutritionRoutes = require('./nutrition.routes');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+router.use('/nutrition', nutritionRoutes); // Esto dejará la ruta completa en /api/nutrition/generar-plan
 
-app.use(cors());
-app.use(express.json());
-
-// Importar rutas
-const nutritionRoutes = require('./routes/nutrition.routes');
-app.use('/api/nutrition', nutritionRoutes);
-
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
-});
+module.exports = router;
