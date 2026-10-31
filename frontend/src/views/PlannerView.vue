@@ -6,7 +6,7 @@
       <header class="text-center space-y-3">
         <div class="inline-flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold px-4 py-1.5 rounded-full shadow-inner">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>NutriOptimizer AI • Motor Académico PostgreSQL (7 Restricciones)</span>
+          <span>NutriOptimizer  • Motor Académico PostgreSQL (7 Restricciones)</span>
         </div>
         <h1 class="text-4xl sm:text-6xl font-black tracking-tight text-white">
           Planificador <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">Nutricional</span>
