@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const nutritionController = require('../controllers/nutrition.controller');
+const { generarPlanNutricional } = require('../controllers/nutrition.controller');
 
-// La ruta completa será /api/nutrition/generar-plan
-router.post('/generar-plan', nutritionController.generarPlan);
+// Ruta POST para generar y guardar el plan nutricional
+router.post('/generar-plan', generarPlanNutricional);
 
 module.exports = router;

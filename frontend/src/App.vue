@@ -1,15 +1,9 @@
 <template>
   <div id="app">
-    <router-view />
+    <PlannerView />
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
+import PlannerView from './views/PlannerView.vue'
 </script>
-
-<style>
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  color: #2c3e50;
-}
-</style>

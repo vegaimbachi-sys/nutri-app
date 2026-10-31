@@ -1,424 +1,230 @@
-<script setup>
-import { ref } from 'vue';
-import api from '../services/api';
-
-const presupuesto = ref(150000);
-const calorias = ref(2000);
-const proteina = ref(120);
-const sodio = ref(2300);
-const alergias = ref([]);
-
-const resultadoPlan = ref(null);
-const cargando = ref(false);
-
-const listaAlergias = [
-  'Sin Gluten',
-  'Sin Lactosa',
-  'Sin Mariscos',
-  'Vegetariano',
-  'Sin Frutos Secos',
-  'Bajo en Azúcar',
-  'Sin Huevo'
-];
-
-const bancoComidas = {
-  desayunos: [
-    { nombre: 'Avena con manzana y canela', etiquetas: ['Sin Lactosa', 'Vegetariano', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Huevos revueltos con espinacas y tostadas integrales', etiquetas: ['Sin Lactosa', 'Sin Mariscos', 'Sin Frutos Secos'] },
-    { nombre: 'Batido de proteína vegetal con banano y agua de coco', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Vegetariano', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Tostadas sin gluten con aguacate y tomate', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Vegetariano', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Yogur vegetal con chía y fruta picada', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Vegetariano', 'Sin Mariscos', 'Sin Huevo'] },
-    { nombre: 'Arepa de maíz con queso bajo en lactosa', etiquetas: ['Sin Gluten', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] }
-  ],
-  almuerzos: [
-    { nombre: 'Pechuga a la plancha con arroz integral y ensalada verde', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo', 'Bajo en Azúcar'] },
-    { nombre: 'Lentejas guisadas con zanahoria, arroz y plátano cocido', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Vegetariano', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Filete de pescado a la plancha con puré de papa sin leche', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Cazuela de garbanzos con vegetales salteados y quinua', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Vegetariano', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Pollo al horno con yuca cocida y ensalada de tomate', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Salmón a la plancha con vegetales al vapor y camote', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Sin Frutos Secos', 'Sin Huevo'] }
-  ],
-  cenas: [
-    { nombre: 'Crema de ahuyama y verduras con semillas de calabaza', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Vegetariano', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Ensalada de atún con aguacate y limón', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Omelette de claras con champiñones y espinacas', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Vegetariano', 'Sin Mariscos', 'Sin Frutos Secos'] },
-    { nombre: 'Wrap de maíz con pechuga desmechada y vegetales', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] },
-    { nombre: 'Sopa de verduras con trozos de pollo magro', etiquetas: ['Sin Gluten', 'Sin Lactosa', 'Sin Mariscos', 'Sin Frutos Secos', 'Sin Huevo'] }
-  ]
-};
-
-const enviarFormulario = async () => {
-  cargando.value = true;
-  
-  try {
-    const payload = {
-      presupuesto: presupuesto.value,
-      calorias: calorias.value,
-      proteina: proteina.value,
-      sodio: sodio.value,
-      alergias: [...alergias.value]
-    };
-
-    const response = await api.post('/nutrition/generar-plan', payload);
-    
-    if (response.data && response.data.menu) {
-      resultadoPlan.value = response.data.data || response.data;
-    } else {
-      generarPlanDinamicoSegunRestricciones();
-    }
-  } catch (err) {
-    generarPlanDinamicoSegunRestricciones();
-  } finally {
-    cargando.value = false;
-  }
-};
-
-const seleccionarPlatoApto = (lista, restricciones) => {
-  if (!restricciones || restricciones.length === 0) {
-    return lista[Math.floor(Math.random() * lista.length)].nombre;
-  }
-  
-  const aptos = lista.filter(plato => 
-    restricciones.every(r => plato.etiquetas.includes(r))
-  );
-
-  if (aptos.length > 0) {
-    return aptos[Math.floor(Math.random() * aptos.length)].nombre;
-  }
-  
-  return `Plato adaptado según restricciones (${restricciones.join(', ')})`;
-};
-
-const generarPlanDinamicoSegunRestricciones = () => {
-  const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-  const restriccionesActivas = alergias.value.length > 0 ? [...alergias.value] : ['Ninguna'];
-  const costoDiarioPromedio = Math.round(presupuesto.value / 7);
-
-  const menuDinamico = dias.map(dia => ({
-    dia,
-    desayuno: seleccionarPlatoApto(bancoComidas.desayunos, alergias.value),
-    almuerzo: seleccionarPlatoApto(bancoComidas.almuerzos, alergias.value),
-    cena: seleccionarPlatoApto(bancoComidas.cenas, alergias.value),
-    costo: costoDiarioPromedio
-  }));
-
-  resultadoPlan.value = {
-    resumen: {
-      costoEstimado: Math.round(presupuesto.value * 0.94),
-      caloriasDiarias: calorias.value,
-      proteinaDiaria: proteina.value,
-      sodioDiario: sodio.value,
-      cumpleAlergias: restriccionesActivas
-    },
-    menu: menuDinamico
-  };
-};
-</script>
-
 <template>
-  <div class="page-background">
-    <div class="planner-card">
-      <div class="header">
-        <div class="badge">NutriOptimizer AI ✦</div>
-        <h1>Planificador Nutricional Inteligente</h1>
-        <p>Genera un menú semanal adaptado en tiempo real a tus restricciones y presupuesto.</p>
-      </div>
-
-      <form @submit.prevent="enviarFormulario" class="form-grid">
-        <div class="input-group">
-          <label>💰 Presupuesto Semanal Máximo ($ COP)</label>
-          <input v-model.number="presupuesto" type="number" required placeholder="Ej: 150000" />
+  <div class="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans selection:bg-emerald-500 selection:text-slate-950">
+    <div class="w-full max-w-7xl mx-auto space-y-10">
+      
+      <!-- Encabezado -->
+      <header class="text-center space-y-3">
+        <div class="inline-flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold px-4 py-1.5 rounded-full shadow-inner">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>NutriOptimizer AI • Motor Académico PostgreSQL (7 Restricciones)</span>
         </div>
+        <h1 class="text-4xl sm:text-6xl font-black tracking-tight text-white">
+          Planificador <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">Nutricional</span>
+        </h1>
+        <p class="max-w-2xl mx-auto text-slate-400 text-base">
+          Sistema de optimización con restricciones duras (calorías, proteína, presupuesto, alérgenos) y blandas (variedad).
+        </p>
+      </header>
 
-        <div class="input-group">
-          <label>🔥 Calorías Diarias Objetivo (Kcal)</label>
-          <input v-model.number="calorias" type="number" required placeholder="Ej: 2000" />
-        </div>
+      <!-- Layout Principal -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        <!-- Panel Izquierdo: Configuración -->
+        <div class="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-3xl p-8 shadow-2xl backdrop-blur-xl space-y-6">
+          <h2 class="text-xl font-bold text-white flex items-center space-x-3 border-b border-slate-800 pb-4">
+            <span class="p-2 bg-emerald-500/10 rounded-xl text-emerald-400">⚙️</span>
+            <span>Parámetros Biométricos & Económicos</span>
+          </h2>
 
-        <div class="input-group">
-          <label>💪 Proteína Mínima Diaria (g)</label>
-          <input v-model.number="proteina" type="number" required placeholder="Ej: 120" />
-        </div>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Peso Corporal (kg) - [Calcula R2]</label>
+              <input 
+                type="number" 
+                v-model.number="form.peso" 
+                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3.5 text-white font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition text-sm shadow-inner"
+              />
+            </div>
 
-        <div class="input-group">
-          <label>🧂 Límite Máximo de Sodio (mg)</label>
-          <input v-model.number="sodio" type="number" required placeholder="Ej: 2300" />
-        </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Presupuesto Semanal Máximo ($ COP) - [R4]</label>
+              <input 
+                type="number" 
+                v-model.number="form.presupuesto" 
+                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3.5 text-white font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition text-sm shadow-inner"
+              />
+            </div>
 
-        <div class="full-width">
-          <label class="section-title">🛡️ Alergias y Restricciones Dietarias</label>
-          <div class="checkbox-grid">
-            <label v-for="item in listaAlergias" :key="item" class="checkbox-card">
-              <input type="checkbox" :value="item" v-model="alergias" />
-              <span>{{ item }}</span>
-            </label>
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Meta Calórica Diaria (kcal) - [R1]</label>
+              <input 
+                type="number" 
+                v-model.number="form.calorias" 
+                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3.5 text-white font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition text-sm shadow-inner"
+              />
+            </div>
+
+            <!-- Las 7 Restricciones Exactas -->
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Restricciones Estrictas / Alergias (R5)</label>
+              <div class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                <label 
+                  v-for="item in listaRestricciones" 
+                  :key="item.valor"
+                  :class="[
+                    'flex items-center justify-between p-3.5 rounded-xl border transition cursor-pointer text-sm font-semibold select-none',
+                    form.alergias.includes(item.valor)
+                      ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-300 shadow-md'
+                      : 'bg-slate-950/60 border-slate-800/80 text-slate-400 hover:border-slate-700'
+                  ]"
+                >
+                  <span>{{ item.etiqueta }}</span>
+                  <input 
+                    type="checkbox" 
+                    :value="item.valor" 
+                    v-model="form.alergias" 
+                    class="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0 w-4 h-4 cursor-pointer" 
+                  />
+                </label>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div class="full-width">
-          <button type="submit" class="submit-btn" :disabled="cargando">
-            <span v-if="!cargando">🚀 Generar Plan Nutricional Optimizado</span>
-            <span v-else>🔄 Adaptando Menú Personalizado...</span>
-          </button>
-        </div>
-      </form>
-
-      <div v-if="resultadoPlan" class="results-container">
-        <h2>📋 Tu Plan Semanal Adaptado</h2>
-
-        <div class="summary-cards" v-if="resultadoPlan.resumen">
-          <div class="stat-card">
-            <span class="stat-title">Costo Semanal</span>
-            <span class="stat-value">${{ Number(resultadoPlan.resumen.costoEstimado).toLocaleString() }}</span>
-            <span class="stat-sub">Ajustado al presupuesto</span>
-          </div>
-
-          <div class="stat-card">
-            <span class="stat-title">Promedio Calórico</span>
-            <span class="stat-value">{{ resultadoPlan.resumen.caloriasDiarias }} Kcal</span>
-            <span class="stat-sub">Meta diaria</span>
-          </div>
-
-          <div class="stat-card">
-            <span class="stat-title">Aporte Proteico</span>
-            <span class="stat-value">{{ resultadoPlan.resumen.proteinaDiaria }}g</span>
-            <span class="stat-sub">Cumple requisito</span>
-          </div>
-
-          <div class="stat-card">
-            <span class="stat-title">Restricciones Filtro</span>
-            <span class="stat-value tag-box">
-              <span v-for="tag in resultadoPlan.resumen.cumpleAlergias" :key="tag" class="tag">{{ tag }}</span>
+          <button 
+            @click="generarPlan" 
+            :disabled="cargando"
+            class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-[0.98] text-slate-950 font-black tracking-wide shadow-lg shadow-emerald-500/20 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-base"
+          >
+            <span v-if="!cargando">Optimizar Menú Semanal</span>
+            <span v-else class="flex items-center space-x-2 text-sm">
+              <svg class="animate-spin h-5 w-5 text-slate-950" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              <span>Aplicando Restricciones...</span>
             </span>
+          </button>
+
+          <div v-if="errorMensaje" class="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
+            ⚠️ {{ errorMensaje }}
           </div>
         </div>
 
-        <div class="menu-list" v-if="resultadoPlan.menu">
-          <div v-for="dia in resultadoPlan.menu" :key="dia.dia" class="day-card">
-            <div class="day-header">
-              <h3>{{ dia.dia }}</h3>
-              <span class="day-price">Est. ${{ Number(dia.costo).toLocaleString() }}</span>
+        <!-- Panel Derecho: Resultados -->
+        <div class="lg:col-span-7 space-y-6">
+          
+          <!-- Estado Vacío -->
+          <div v-if="!resultado && !cargando" class="bg-slate-900/40 border border-slate-800/80 rounded-3xl p-16 text-center space-y-5 min-h-[520px] flex flex-col items-center justify-center shadow-xl">
+            <div class="w-20 h-20 rounded-2xl bg-slate-800/80 border border-slate-700/50 flex items-center justify-center text-3xl shadow-inner">
+              📊
             </div>
-            <div class="meals">
-              <p><strong>🌅 Desayuno:</strong> {{ dia.desayuno }}</p>
-              <p><strong>🍲 Almuerzo:</strong> {{ dia.almuerzo }}</p>
-              <p><strong>🌙 Cena:</strong> {{ dia.cena }}</p>
+            <div class="space-y-2">
+              <h3 class="text-xl font-bold text-white">Listo para optimizar</h3>
+              <p class="text-sm text-slate-400 max-w-md mx-auto">Ingresa tus datos y restricciones a la izquierda para generar el plan semanal validado por el motor SQL.</p>
             </div>
           </div>
+
+          <!-- Visualización del Plan Generado -->
+          <div v-if="resultado" class="space-y-6 animate-fade-in">
+            
+            <!-- Tarjetas de Resumen -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Costo vs Presupuesto [R4]</span>
+                <p class="text-xl font-black text-emerald-400 mt-1">${{ resultado.resumen.costoEstimado.toLocaleString() }} <span class="text-xs text-slate-400">COP</span></p>
+                <span :class="resultado.resumen.cumplePresupuesto ? 'text-emerald-400' : 'text-rose-400'" class="text-[10px] font-bold mt-1 block">
+                  {{ resultado.resumen.cumplePresupuesto ? '✔ Dentro del presupuesto' : '⚠ Supera el presupuesto' }}
+                </span>
+              </div>
+
+              <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Proteína Diaria [R2]</span>
+                <p class="text-2xl font-black text-teal-300 mt-1">{{ resultado.resumen.proteinaDiaria }} <span class="text-xs text-slate-400">g (Mínimo)</span></p>
+              </div>
+
+              <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">ID Registro Tesis</span>
+                <p class="text-lg font-mono font-bold text-amber-400 mt-1.5">#{{ planId }}</p>
+              </div>
+            </div>
+
+            <!-- Grilla de los 7 Días -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[550px] overflow-y-auto pr-2">
+              <div 
+                v-for="dia in resultado.menu" 
+                :key="dia.dia" 
+                class="bg-slate-900/90 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-5 transition duration-200 shadow-md space-y-3"
+              >
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <span class="font-extrabold text-white text-base flex items-center space-x-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <span>{{ dia.dia }}</span>
+                  </span>
+                  <span class="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20">
+                    ${{ dia.costo.toLocaleString() }}
+                  </span>
+                </div>
+
+                <div class="space-y-2 text-xs">
+                  <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">🍳 Desayuno</span>
+                    <span class="text-slate-200 font-medium block">{{ dia.desayuno }}</span>
+                  </div>
+                  <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">🍲 Almuerzo</span>
+                    <span class="text-slate-200 font-medium block">{{ dia.almuerzo }}</span>
+                  </div>
+                  <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">🥗 Cena</span>
+                    <span class="text-slate-200 font-medium block">{{ dia.cena }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
         </div>
+
       </div>
+
     </div>
   </div>
 </template>
 
-<style scoped>
-.page-background {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-  padding: 40px 20px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-}
+<script setup>
+import { ref, reactive } from 'vue';
+import axios from 'axios';
 
-.planner-card {
-  background: #ffffff;
-  border-radius: 20px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-  width: 100%;
-  max-width: 900px;
-  padding: 35px;
-}
+// Las 7 restricciones exactas adaptadas al formulario
+const listaRestricciones = [
+  { etiqueta: 'Sin Lactosa', valor: 'lactosa' },
+  { etiqueta: 'Sin Gluten', valor: 'gluten' },
+  { etiqueta: 'Sin Mariscos', valor: 'mariscos' },
+  { etiqueta: 'Sin Pescado', valor: 'pescado' },
+  { etiqueta: 'Sin Frutos Secos', valor: 'frutos_secos' },
+  { etiqueta: 'Sin Soya', valor: 'soya' },
+  { etiqueta: 'Bajo en Sodio', valor: 'sodio' }
+];
 
-.header {
-  text-align: center;
-  margin-bottom: 30px;
-}
+const form = reactive({
+  peso: 75,
+  presupuesto: 120000,
+  calorias: 2200,
+  alergias: []
+});
 
-.badge {
-  display: inline-block;
-  background: #e0f2fe;
-  color: #0369a1;
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  margin-bottom: 12px;
-}
+const cargando = ref(false);
+const resultado = ref(null);
+const planId = ref(null);
+const errorMensaje = ref(null);
 
-.header h1 {
-  color: #0f172a;
-  font-size: 2rem;
-  margin: 0 0 10px 0;
-  font-weight: 800;
-}
+const generarPlan = async () => {
+  cargando.value = true;
+  resultado.value = null;
+  errorMensaje.value = null;
 
-.header p {
-  color: #64748b;
-  font-size: 0.95rem;
-  margin: 0;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-.full-width {
-  grid-column: span 2;
-}
-
-.input-group label, .section-title {
-  display: block;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 8px;
-}
-
-.input-group input {
-  width: 100%;
-  padding: 12px 14px;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 10px;
-  font-size: 1rem;
-  box-sizing: border-box;
-}
-
-.checkbox-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 10px;
-}
-
-.checkbox-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.88rem;
-  color: #475569;
-}
-
-.submit-btn {
-  width: 100%;
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-  color: white;
-  border: none;
-  padding: 15px;
-  border-radius: 12px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.results-container {
-  margin-top: 40px;
-  padding-top: 30px;
-  border-top: 2px dashed #e2e8f0;
-}
-
-.results-container h2 {
-  color: #0f172a;
-  font-size: 1.4rem;
-  margin-bottom: 20px;
-}
-
-.summary-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 15px;
-  margin-bottom: 25px;
-}
-
-.stat-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-title {
-  font-size: 0.8rem;
-  color: #64748b;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.stat-value {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #0f172a;
-  margin: 6px 0 2px 0;
-}
-
-.stat-sub {
-  font-size: 0.75rem;
-  color: #16a34a;
-  font-weight: 600;
-}
-
-.tag-box {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.tag {
-  background: #dbeafe;
-  color: #1e40af;
-  font-size: 0.7rem;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.menu-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.day-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-left: 5px solid #0284c7;
-  border-radius: 10px;
-  padding: 16px 20px;
-}
-
-.day-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.day-header h3 {
-  margin: 0;
-  color: #0369a1;
-  font-size: 1.1rem;
-}
-
-.day-price {
-  background: #f1f5f9;
-  color: #475569;
-  padding: 4px 10px;
-  border-radius: 15px;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.meals p {
-  margin: 6px 0;
-  font-size: 0.92rem;
-  color: #334155;
-}
-</style>
+  try {
+    const res = await axios.post('http://localhost:3000/api/nutrition/generar-plan', form);
+    if (res.data.success) {
+      resultado.value = res.data.data;
+      planId.value = res.data.planId;
+    }
+  } catch (err) {
+    console.error("Error al conectar:", err);
+    errorMensaje.value = err.response?.data?.message || "No se pudo conectar con el servidor backend en http://localhost:3000";
+  } finally {
+    cargando.value = false;
+  }
+};
+</script>
