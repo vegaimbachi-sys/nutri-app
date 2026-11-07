@@ -4,9 +4,9 @@ const options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'BackWeb API',
+      title: 'NutriOptimizer API',
       version: '1.0.0',
-      description: 'API REST con Express y PostgreSQL',
+      description: 'API REST con Express y PostgreSQL para motor nutricional',
     },
     servers: [
       {

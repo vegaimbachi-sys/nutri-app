@@ -1,9 +1,23 @@
 const express = require('express');
-const router = express.Router();
+const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
+require('dotenv').config();
 
-// Como index.js ya está dentro de 'src/routes/', solo requerimos el archivo directamente con './'
-const nutritionRoutes = require('./nutrition.routes');
+const pool = require('./config/db');
+const runMigration = require('./config/migrate');
+const swaggerSpec = require('./config/swagger');
+const nutritionRoutes = require('./routes/nutrition.routes');
 
-router.use('/nutrition', nutritionRoutes); 
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-module.exports = router;
+app.use(cors());
+app.use(express.json());
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api/nutrition', nutritionRoutes);
+
+app.listen(PORT, async () => {
+  await runMigration();
+  console.log(`Servidor activo en: http://localhost:${PORT}`);
+});

@@ -1,142 +1,67 @@
 const pool = require('../config/db');
 
-// Función auxiliar para seleccionar un elemento aleatorio de un arreglo
-const obtenerAleatorio = (arr, fallback) => {
-  if (!arr || arr.length === 0) return fallback;
-  return arr[Math.floor(Math.random() * arr.length)];
-};
-
-const generarPlanNutricional = async (req, res) => {
+exports.generarPlan = async (req, res) => {
   try {
-    const { presupuesto, calorias, proteina, sodio, alergias } = req.body;
+    const { peso, presupuesto, calorias, alergias = [] } = req.body;
 
-    // 1. Consultar alimentos que NO contengan las alergias seleccionadas
-    let queryAlimentos = 'SELECT * FROM alimentos WHERE activo = true';
-    let queryParams = [];
-
-    if (alergias && alergias.length > 0) {
-      queryAlimentos += ` AND NOT (alergias && $1::text[])`;
-      queryParams.push(alergias);
-    }
-
-    const resultadoAlimentos = await pool.query(queryAlimentos, queryParams);
-    const alimentosDisponibles = resultadoAlimentos.rows;
+    const result = await pool.query('SELECT * FROM alimentos');
+    console.log("Registros encontrados en DB:", result.rows.length);
+    let alimentosDisponibles = result.rows;
 
     if (alimentosDisponibles.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No se encontraron alimentos en la base de datos con esas restricciones."
+      return res.status(400).json({ success: false, message: 'La tabla alimentos está vacía o se consultó otra base de datos.' });
+    }
+
+    if (alergias.length > 0) {
+      alimentosDisponibles = alimentosDisponibles.filter(item => {
+        if (!item.alergias) return true;
+        let itemAlergias = Array.isArray(item.alergias) 
+          ? item.alergias 
+          : item.alergias.replace(/[{}]/g, '').split(',').map(a => a.trim());
+        return !itemAlergias.some(alergia => alergias.includes(alergia));
       });
     }
 
-    // 2. Categorizar alimentos por palabras clave para hacer combinaciones coherentes
-    const desayunos = alimentosDisponibles.filter(a => 
-      a.nombre.toLowerCase().includes('huevos') || 
-      a.nombre.toLowerCase().includes('avena') || 
-      a.nombre.toLowerCase().includes('yogur') || 
-      a.nombre.toLowerCase().includes('pan') ||
-      a.nombre.toLowerCase().includes('arepa')
-    );
+    const proteinaDiaria = Math.round(peso * 2.0);
+    const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    let menu = [];
+    let costoEstimadoTotal = 0;
 
-    const proteinas = alimentosDisponibles.filter(a => 
-      a.nombre.toLowerCase().includes('pollo') || 
-      a.nombre.toLowerCase().includes('carne') || 
-      a.nombre.toLowerCase().includes('tilapia') || 
-      a.nombre.toLowerCase().includes('pescado') || 
-      a.nombre.toLowerCase().includes('camarones') ||
-      a.nombre.toLowerCase().includes('atún') ||
-      a.nombre.toLowerCase().includes('tofu') ||
-      a.nombre.toLowerCase().includes('lentejas')
-    );
+    for (let i = 0; i < diasSemana.length; i++) {
+      const desayuno = alimentosDisponibles[i % alimentosDisponibles.length];
+      const almuerzo = alimentosDisponibles[(i + 1) % alimentosDisponibles.length];
+      const cena = alimentosDisponibles[(i + 2) % alimentosDisponibles.length];
 
-    const acompañamientos = alimentosDisponibles.filter(a => 
-      a.nombre.toLowerCase().includes('arroz') || 
-      a.nombre.toLowerCase().includes('papa') || 
-      a.nombre.toLowerCase().includes('camote') || 
-      a.nombre.toLowerCase().includes('quinoa') || 
-      a.nombre.toLowerCase().includes('pastas') ||
-      a.nombre.toLowerCase().includes('ensalada') ||
-      a.nombre.toLowerCase().includes('brócoli') ||
-      a.nombre.toLowerCase().includes('espinacas')
-    );
+      const costoDia = Number(desayuno.precio || 0) + Number(almuerzo.precio || 0) + Number(cena.precio || 0);
+      costoEstimadoTotal += costoDia;
 
-    // Alimentos comodín por si alguna categoría queda vacía tras los filtros de alergias
-    const fallbackItem = alimentosDisponibles[0];
+      menu.push({
+        dia: diasSemana[i],
+        costo: costoDia,
+        desayuno: `${desayuno.nombre} - ${desayuno.calorias || 0} kcal`,
+        almuerzo: `${almuerzo.nombre} - ${almuerzo.calorias || 0} kcal`,
+        cena: `${cena.nombre} - ${cena.calorias || 0} kcal`
+      });
+    }
 
-    // 3. Generar menú de los 7 días de la semana
-    const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const cumplePresupuesto = costoEstimadoTotal <= (presupuesto || 999999);
+    const planIdGenerado = Math.floor(Math.random() * 90000) + 10000;
 
-    const menuSemanal = dias.map(dia => {
-      const itemDesayuno = obtenerAleatorio(desayunos, fallbackItem);
-      const itemProteina = obtenerAleatorio(proteinas, fallbackItem);
-      const itemAcompañamiento = obtenerAleatorio(acompañamientos, fallbackItem);
-      const itemCena = obtenerAleatorio(proteinas.length > 0 ? proteinas : desayunos, fallbackItem);
-
-      const costoDia = Math.round(
-        Number(itemDesayuno.precio) + 
-        Number(itemProteina.precio) + 
-        Number(itemAcompañamiento.precio) + 
-        Number(itemCena.precio)
-      );
-
-      return {
-        dia,
-        desayuno: itemDesayuno.nombre,
-        almuerzo: `${itemProteina.nombre} con ${itemAcompañamiento.nombre}`,
-        cena: `Opción ligera: ${itemCena.nombre}`,
-        costo: costoDia
-      };
-    });
-
-    const costoTotalSemanal = menuSemanal.reduce((acc, el) => acc + el.costo, 0);
-
-    const resumenData = {
-      costoEstimado: costoTotalSemanal,
-      caloriasDiarias: calorias,
-      proteinaDiaria: proteina,
-      sodioDiario: sodio,
-      cumpleAlergias: alergias && alergias.length > 0 ? alergias : ['Ninguna']
-    };
-
-    // 4. PERSISTENCIA: Guardar el plan generado en PostgreSQL
-    const insertQuery = `
-      INSERT INTO planes_nutricionales 
-      (presupuesto_semanal, calorias_diarias, proteina_diaria, sodio_diario, alergias_aplicadas, menu_generado)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, creado_en;
-    `;
-
-    const insertValues = [
-      presupuesto,
-      calorias,
-      proteina,
-      sodio,
-      alergias || [],
-      JSON.stringify(menuSemanal)
-    ];
-
-    const planGuardado = await pool.query(insertQuery, insertValues);
-
-    // 5. Enviar respuesta al cliente
-    return res.status(200).json({
+    return res.json({
       success: true,
-      planId: planGuardado.rows[0].id,
-      creadoEn: planGuardado.rows[0].creado_en,
+      planId: planIdGenerado,
       data: {
-        resumen: resumenData,
-        menu: menuSemanal
+        resumen: {
+          costoEstimado: costoEstimadoTotal,
+          cumplePresupuesto: cumplePresupuesto,
+          proteinaDiaria: proteinaDiaria
+        },
+        menu: menu
       }
     });
 
   } catch (error) {
-    console.error("Error en generarPlanNutricional:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Error interno del servidor al procesar la solicitud."
-    });
+    console.error('Error detallado en DB:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
-};
-
-module.exports = {
-  generarPlanNutricional
 };
